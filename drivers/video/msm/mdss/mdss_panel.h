@@ -180,6 +180,7 @@ struct mdss_intf_recovery {
  * @MDSS_EVENT_REGISTER_RECOVERY_HANDLER: Event to recover the interface in
  *					case there was any errors detected.
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
  * @MDSS_EVENT_INTF_RESTORE: Event to restore the interface in case there
  *				was any errors detected during normal operation.
@@ -187,6 +188,10 @@ struct mdss_intf_recovery {
  *				<= 0: panel check fail
  *				>  0: panel check success
 >>>>>>> b7334dd98661... msm: mdss: add sysfs node for panel status
+=======
+ * @MDSS_EVENT_INTF_RESTORE: Event to restore the interface in case there
+ *				was any errors detected during normal operation.
+>>>>>>> 87cb3d6deb16... mdss: dsi: add support for data lane workaround for command mode
  */
 enum mdss_intf_events {
 	MDSS_EVENT_RESET = 1,
