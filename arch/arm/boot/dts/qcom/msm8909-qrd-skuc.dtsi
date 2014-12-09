@@ -235,6 +235,7 @@
 };
 
 &sdhc_2 {
+	qcom,no-1p8v;
 	qcom,vdd-always-on;
 	qcom,vdd-lpm-sup;
 
