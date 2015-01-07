@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -345,6 +345,11 @@ int msm_flash_led_off(struct msm_led_flash_ctrl_t *fctrl)
 		return -EINVAL;
 	}
 
+	if (fctrl->led_state != MSM_CAMERA_LED_INIT) {
+		pr_err("%s:%d invalid led state\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
 	flashdata = fctrl->flashdata;
 	power_info = &flashdata->power_info;
 
@@ -371,6 +376,11 @@ int msm_flash_led_low(struct msm_led_flash_ctrl_t *fctrl)
 	struct msm_camera_sensor_board_info *flashdata = NULL;
 	struct msm_camera_power_ctrl_t *power_info = NULL;
 	pr_info("%s:%d called\n", __func__, __LINE__);
+
+	if (fctrl->led_state != MSM_CAMERA_LED_INIT) {
+		pr_err("%s:%d invalid led state\n", __func__, __LINE__);
+		return -EINVAL;
+	}
 
 	flashdata = fctrl->flashdata;
 	power_info = &flashdata->power_info;
@@ -405,6 +415,11 @@ int msm_flash_led_high(struct msm_led_flash_ctrl_t *fctrl)
 	struct msm_camera_sensor_board_info *flashdata = NULL;
 	struct msm_camera_power_ctrl_t *power_info = NULL;
 	pr_info("%s:%d called\n", __func__, __LINE__);
+
+	if (fctrl->led_state != MSM_CAMERA_LED_INIT) {
+		pr_err("%s:%d invalid led state\n", __func__, __LINE__);
+		return -EINVAL;
+	}
 
 	flashdata = fctrl->flashdata;
 	power_info = &flashdata->power_info;
@@ -772,7 +787,7 @@ static void msm_led_i2c_torch_brightness_set(struct led_classdev *led_cdev,
 };
 
 static struct led_classdev msm_torch_i2c_led = {
-	.name			= "torch-light",
+	.name			= "torch-light0",
 	.brightness_set	= msm_led_i2c_torch_brightness_set,
 	.brightness		= LED_OFF,
 };
@@ -921,6 +936,14 @@ int msm_flash_probe(struct platform_device *pdev,
 			&msm_sensor_cci_func_tbl;
 
 	rc = msm_led_flash_create_v4lsubdev(pdev, fctrl);
+
+	/* Assign Global flash control sturcture for local usage */
+	g_fctrl = (void *)fctrl;
+	rc = msm_i2c_torch_create_classdev(&(pdev->dev), NULL);
+	if (rc) {
+		pr_err("%s failed to create classdev %d\n", __func__, __LINE__);
+		return rc;
+	}
 
 	pr_info("%s: probe success\n", __func__);
 	return 0;
