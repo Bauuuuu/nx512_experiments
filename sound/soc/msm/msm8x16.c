@@ -2612,11 +2612,7 @@ int get_cdc_gpio_lines(struct pinctrl *pinctrl, int ext_pa)
 {
 	int ret;
 	pr_debug("%s\n", __func__);
-<<<<<<< HEAD
-	switch (ext_pa & (SEC_MI2S_ID | QUAT_MI2S_ID)) {
-=======
 	switch (ext_pa) {
->>>>>>> d7d20074b205... ASoC: msm: add support for quat and auxpcm mi2s interfaces
 	case SEC_MI2S_ID:
 		pinctrl_info.cdc_lines_sus = pinctrl_lookup_state(pinctrl,
 			"cdc_lines_sec_ext_sus");
@@ -2842,7 +2838,7 @@ static int msm8x16_asoc_machine_probe(struct platform_device *pdev)
 	if (!pdata) {
 		dev_err(&pdev->dev, "Can't allocate msm8x16_asoc_mach_data\n");
 		ret = -ENOMEM;
-		goto err;
+		goto err1;
 	}
 
 	pdata->vaddr_gpio_mux_spkr_ctl =
@@ -3045,6 +3041,11 @@ err:
 		iounmap(pdata->vaddr_gpio_mux_mic_ctl);
 	if (pdata->vaddr_gpio_mux_pcm_ctl)
 		iounmap(pdata->vaddr_gpio_mux_pcm_ctl);
+<<<<<<< HEAD
+=======
+	devm_kfree(&pdev->dev, pdata);
+err1:
+>>>>>>> 0a0cce4a2a07... ASoC: msm: fix warnings and null access issue
 	return ret;
 }
 
