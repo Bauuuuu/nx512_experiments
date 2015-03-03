@@ -3539,6 +3539,17 @@ static int smb135x_hw_init(struct smb135x_chg *chip)
 		}
 	}
 
+	if (chip->soft_current_comp_disabled) {
+		mask = HOT_SOFT_CURRENT_COMP_EN_BIT
+				| COLD_SOFT_CURRENT_COMP_EN_BIT;
+		rc = smb135x_masked_write(chip, CFG_1A_REG, mask, 0);
+		if (rc < 0) {
+			dev_err(chip->dev, "Couldn't disable soft current rc = %d\n",
+					rc);
+			goto free_regulator;
+		}
+	}
+
 	/*
 	 * Command mode for OTG control. This gives us RID interrupts but keeps
 	 * enabling the 5V OTG via i2c register control
