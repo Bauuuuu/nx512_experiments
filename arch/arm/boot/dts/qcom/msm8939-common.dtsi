@@ -1871,4 +1871,3 @@ comment by congshan end*/
 	};
 };
 
-#include "msm8939-gpu.dtsi"
