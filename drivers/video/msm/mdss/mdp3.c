@@ -2303,6 +2303,7 @@ static DEVICE_ATTR(smart_blit, S_IRUGO | S_IWUSR | S_IWGRP, mdp3_show_smart_blit
 
 static struct attribute *mdp3_fs_attrs[] = {
 	&dev_attr_caps.attr,
+	&dev_attr_smart_blit.attr,
 	NULL
 };
 

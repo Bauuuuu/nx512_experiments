@@ -304,6 +304,7 @@ struct mipi_panel_info {
 
     u32  lp11_rst_delay;
     u32  sleep_lp00_delay;
+	u32  post_init_delay;
 };
 
 struct edp_panel_info {
