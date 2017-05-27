@@ -3057,11 +3057,8 @@ err:
 		iounmap(pdata->vaddr_gpio_mux_mic_ctl);
 	if (pdata->vaddr_gpio_mux_pcm_ctl)
 		iounmap(pdata->vaddr_gpio_mux_pcm_ctl);
-<<<<<<< HEAD
-=======
 	devm_kfree(&pdev->dev, pdata);
 err1:
->>>>>>> 0a0cce4a2a07... ASoC: msm: fix warnings and null access issue
 	return ret;
 }
 
