@@ -55,7 +55,6 @@ static struct mutex dsi_mtx;
 /* event */
 struct dsi_event_q {
 	struct mdss_dsi_ctrl_pdata *ctrl;
-	u32 arg;
 	u32 todo;
 };
 
@@ -106,7 +105,6 @@ void mdss_dsi_ctrl_init(struct device *ctrl_dev,
 	spin_lock_init(&ctrl->mdp_lock);
 	mutex_init(&ctrl->mutex);
 	mutex_init(&ctrl->cmd_mutex);
-	mutex_init(&ctrl->clk_lane_mutex);
 	mdss_dsi_buf_alloc(ctrl_dev, &ctrl->tx_buf, SZ_4K);
 	mdss_dsi_buf_alloc(ctrl_dev, &ctrl->rx_buf, SZ_4K);
 	mdss_dsi_buf_alloc(ctrl_dev, &ctrl->status_buf, SZ_4K);
@@ -1302,6 +1300,7 @@ int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 	int short_response, diff, pkt_size, ret = 0;
 	struct dsi_buf *tp, *rp;
 	char cmd;
+	u32 ctrl_rev;
 	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
 
 
@@ -1339,6 +1338,7 @@ int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 	}
 
 do_send:
+	ctrl_rev = MIPI_INP(ctrl->ctrl_base);
 	ctrl->cmd_cfg_restore = __mdss_dsi_cmd_mode_config(ctrl, 1);
 
 	if (rlen <= 2) {
@@ -1400,7 +1400,7 @@ do_send:
 			goto end;
 		}
 
-		if (ctrl->hw_rev >= MDSS_DSI_HW_REV_101) {
+		if (ctrl_rev >= MDSS_DSI_HW_REV_101) {
 			/* clear the RDBK_DATA registers */
 			MIPI_OUTP(ctrl->ctrl_base + 0x01d4, 0x1);
 			wmb(); /* make sure the RDBK registers are cleared */
@@ -1512,7 +1512,7 @@ end:
 	return rp->read_cnt;
 }
 
-#define DMA_TX_TIMEOUT 1000
+#define DMA_TX_TIMEOUT 200
 
 static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 					struct dsi_buf *tp)
@@ -1521,7 +1521,7 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	int domain = MDSS_IOMMU_DOMAIN_UNSECURE;
 	char *bp;
 	struct mdss_dsi_ctrl_pdata *mctrl = NULL;
-	int ignored = 1;	/* overflow ignored */
+	int ignored = 0;	/* overflow ignored */
 
 	bp = tp->data;
 
@@ -1542,6 +1542,9 @@ static int mdss_dsi_cmd_dma_tx(struct mdss_dsi_ctrl_pdata *ctrl,
 	}
 
 	INIT_COMPLETION(ctrl->dma_comp);
+
+	if (ctrl->panel_mode == DSI_VIDEO_MODE)
+		ignored = 1;
 
 	if (mdss_dsi_sync_wait_trigger(ctrl)) {
 		/* broadcast same cmd to other panel */
@@ -1624,7 +1627,7 @@ static int mdss_dsi_cmd_dma_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 			struct dsi_buf *rp, int rx_byte)
 
 {
-	u32 *lp, *temp, data;
+	u32 *lp, *temp, data, ctrl_rev;
 	int i, j = 0, off, cnt;
 	bool ack_error = false;
 	char reg[16];
@@ -1636,10 +1639,12 @@ static int mdss_dsi_cmd_dma_rx(struct mdss_dsi_ctrl_pdata *ctrl,
 	cnt += 3;
 	cnt >>= 2;
 
+	ctrl_rev = MIPI_INP(ctrl->ctrl_base);
+
 	if (cnt > 4)
 		cnt = 4; /* 4 x 32 bits registers only */
 
-	if (ctrl->hw_rev >= MDSS_DSI_HW_REV_101) {
+	if (ctrl_rev >= MDSS_DSI_HW_REV_101) {
 		rp->read_cnt = (MIPI_INP((ctrl->ctrl_base) + 0x01d4) >> 16);
 		pr_debug("%s: bytes read:%d\n", __func__, rp->read_cnt);
 
@@ -1872,12 +1877,8 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 	if (mdss_get_sd_client_cnt())
 		return -EPERM;
 
-	if (from_mdp) {	/* from mdp kickoff */
+	if (from_mdp)	/* from mdp kickoff */
 		mutex_lock(&ctrl->cmd_mutex);
-		pinfo = &ctrl->panel_data.panel_info;
-		if (pinfo->partial_update_enabled)
-			roi = &pinfo->roi;
-	}
 
 	req = mdss_dsi_cmdlist_get(ctrl);
 
@@ -1889,27 +1890,6 @@ int mdss_dsi_cmdlist_commit(struct mdss_dsi_ctrl_pdata *ctrl, int from_mdp)
 
 	pr_debug("%s: ctrl=%d from_mdp=%d pid=%d\n", __func__,
 				ctrl->ndx, from_mdp, current->pid);
-
-	if (from_mdp) { /* from mdp kickoff */
-		/*
-		 * when partial update enabled, the roi of pinfo
-		 * is updated before mdp kickoff. Either width or
-		 * height of roi is 0, then it is false kickoff so
-		 * no mdp_busy flag set needed.
-		 * when partial update disabled, mdp_busy flag
-		 * alway set.
-		 */
-		if (!roi || (roi->w != 0 || roi->h != 0)) {
-			if (ctrl->hw_rev == MDSS_DSI_HW_REV_103_1 &&
-					ctrl->panel_mode == DSI_CMD_MODE)
-				mdss_dsi_start_hs_clk_lane(ctrl);
-		}
-	} else {	/* from dcs send */
-		if (ctrl->hw_rev == MDSS_DSI_HW_REV_103_1 &&
-				ctrl->panel_mode == DSI_CMD_MODE)
-			mdss_dsi_cmd_start_hs_clk_lane(ctrl);
-	}
-
 
 	if (req == NULL)
 		goto need_lock;
@@ -1973,21 +1953,20 @@ need_lock:
 		 * when partial update disabled, mdp_busy flag
 		 * alway set.
 		 */
+		pinfo = &ctrl->panel_data.panel_info;
+		if (pinfo->partial_update_enabled)
+			roi = &pinfo->roi;
+
 		if (!roi || (roi->w != 0 || roi->h != 0))
 			mdss_dsi_cmd_mdp_start(ctrl);
 
 		mutex_unlock(&ctrl->cmd_mutex);
-	} else {	/* from dcs send */
-		if (ctrl->hw_rev == MDSS_DSI_HW_REV_103_1 &&
-				ctrl->panel_mode == DSI_CMD_MODE)
-			mdss_dsi_cmd_stop_hs_clk_lane(ctrl);
 	}
 
 	return ret;
 }
 
-static void dsi_send_events(struct mdss_dsi_ctrl_pdata *ctrl,
-					u32 events, u32 arg)
+static void dsi_send_events(struct mdss_dsi_ctrl_pdata *ctrl, u32 events)
 {
 	struct dsi_event_q *evq;
 
@@ -1999,7 +1978,6 @@ static void dsi_send_events(struct mdss_dsi_ctrl_pdata *ctrl,
 	spin_lock(&dsi_event.event_lock);
 	evq = &dsi_event.todo_list[dsi_event.event_pndx++];
 	evq->todo = events;
-	evq->arg = arg;
 	evq->ctrl = ctrl;
 	dsi_event.event_pndx %= DSI_EVENT_Q_MAX;
 	wake_up(&dsi_event.event_q);
@@ -2014,7 +1992,6 @@ static int dsi_event_thread(void *data)
 	unsigned long flag;
 	struct sched_param param;
 	u32 todo = 0, ln_status;
-	u32 arg;
 	int ret;
 
 	param.sched_priority = 16;
@@ -2033,7 +2010,6 @@ static int dsi_event_thread(void *data)
 		evq = &ev->todo_list[ev->event_gndx++];
 		todo = evq->todo;
 		ctrl = evq->ctrl;
-		arg = evq->arg;
 		evq->todo = 0;
 		ev->event_gndx %= DSI_EVENT_Q_MAX;
 		spin_unlock_irqrestore(&ev->event_lock, flag);
@@ -2082,6 +2058,8 @@ static int dsi_event_thread(void *data)
 								__func__);
 				mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 1);
 				mdss_dsi_ctl_phy_reset(ctrl);
+				mdss_dsi_err_intr_ctrl(ctrl,
+						DSI_INTR_ERROR_MASK, 1);
 				mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 0);
 			}
 			mutex_unlock(&dsi_mtx);
@@ -2102,8 +2080,6 @@ static int dsi_event_thread(void *data)
 			mdss_dsi_clk_ctrl(ctrl, DSI_ALL_CLKS, 0);
 		}
 
-		if (todo & DSI_EV_STOP_HS_CLK_LANE)
-			mdss_dsi_stop_hs_clk_lane(ctrl, arg);
 	}
 
 	return 0;
@@ -2170,14 +2146,14 @@ void mdss_dsi_fifo_status(struct mdss_dsi_ctrl_pdata *ctrl)
 		MIPI_OUTP(base + 0x000c, status);
 		pr_err("%s: status=%x\n", __func__, status);
 		if (status & 0x44440000) {/* DLNx_HS_FIFO_OVERFLOW */
-			dsi_send_events(ctrl, DSI_EV_DLNx_FIFO_OVERFLOW, 0);
+			dsi_send_events(ctrl, DSI_EV_DLNx_FIFO_OVERFLOW);
 			/* Ignore FIFO EMPTY when overflow happens */
 			status = status & 0xeeeeffff;
 		}
 		if (status & 0x0080)  /* CMD_DMA_FIFO_UNDERFLOW */
-			dsi_send_events(ctrl, DSI_EV_MDP_FIFO_UNDERFLOW, 0);
+			dsi_send_events(ctrl, DSI_EV_MDP_FIFO_UNDERFLOW);
 		if (status & 0x11110000) /* DLN_FIFO_EMPTY */
-			dsi_send_events(ctrl, DSI_EV_DSI_FIFO_EMPTY, 0);
+			dsi_send_events(ctrl, DSI_EV_DSI_FIFO_EMPTY);
 	}
 }
 
@@ -2206,7 +2182,7 @@ void mdss_dsi_clk_status(struct mdss_dsi_ctrl_pdata *ctrl)
 
 	if (status & 0x10000) { /* DSI_CLK_PLL_UNLOCKED */
 		MIPI_OUTP(base + 0x0120, status);
-		dsi_send_events(ctrl, DSI_EV_PLL_UNLOCKED, 0);
+		dsi_send_events(ctrl, DSI_EV_PLL_UNLOCKED);
 		pr_err("%s: status=%x\n", __func__, status);
 	}
 }
@@ -2232,7 +2208,7 @@ void mdss_dsi_error(struct mdss_dsi_ctrl_pdata *ctrl)
 	intr |= DSI_INTR_ERROR;
 	MIPI_OUTP(ctrl->ctrl_base + 0x0110, intr);
 
-	dsi_send_events(ctrl, DSI_EV_MDP_BUSY_RELEASE, 0);
+	dsi_send_events(ctrl, DSI_EV_MDP_BUSY_RELEASE);
 }
 
 irqreturn_t mdss_dsi_isr(int irq, void *ptr)
@@ -2275,15 +2251,9 @@ irqreturn_t mdss_dsi_isr(int irq, void *ptr)
 	if (isr & DSI_INTR_CMD_MDP_DONE) {
 		MDSS_XLOG(ctrl->ndx, ctrl->mdp_busy, isr, 0x99);
 		spin_lock(&ctrl->mdp_lock);
+		ctrl->mdp_busy = false;
 		mdss_dsi_disable_irq_nosync(ctrl, DSI_MDP_TERM);
-		if (ctrl->hw_rev == MDSS_DSI_HW_REV_103_1 &&
-				ctrl->panel_mode == DSI_CMD_MODE) {
-			dsi_send_events(ctrl, DSI_EV_STOP_HS_CLK_LANE,
-							DSI_MDP_TERM);
-		} else {
-			ctrl->mdp_busy = false;
-			complete(&ctrl->mdp_comp);
-		}
+		complete(&ctrl->mdp_comp);
 		spin_unlock(&ctrl->mdp_lock);
 	}
 
