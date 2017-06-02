@@ -85,6 +85,11 @@ enum wcd_mbhc_cs_mb_en_flag {
 	WCD_MBHC_EN_PULLUP,
 	WCD_MBHC_EN_NONE,
 };
+#ifdef CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
+extern bool aw8736_ext_spk_power_amp_on(int);
+extern bool hphr_channel_on(int);
+extern void schedule_delay_pa_on(void);
+#endif //CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
 
 static void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 				struct snd_soc_jack *jack, int status, int mask)
@@ -315,6 +320,9 @@ static int wcd_event_notify(struct notifier_block *self, unsigned long val,
 			hphrocp_off_report(mbhc, SND_JACK_OC_HPHR);
 		clear_bit(WCD_MBHC_EVENT_PA_HPHR, &mbhc->event_state);
 		/* check if micbias is enabled */
+#ifdef CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
+		aw8736_ext_spk_power_amp_on(0);
+#endif //CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
 		if (micbias2)
 			/* Disable cs, pullup & enable micbias */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
@@ -335,12 +343,25 @@ static int wcd_event_notify(struct notifier_block *self, unsigned long val,
 	case WCD_EVENT_PRE_HPHR_PA_ON:
 		set_bit(WCD_MBHC_EVENT_PA_HPHR, &mbhc->event_state);
 		/* check if micbias is enabled */
+#ifdef CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
+		schedule_delay_pa_on();
+		if (mbhc->current_plug != MBHC_PLUG_TYPE_NONE) {
+			if (micbias2)
+				/* Disable cs, pullup & enable micbias */
+				wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
+			else
+				/* Disable micbias, enable pullup & cs */
+				wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_PULLUP);
+		}
+#else
 		if (micbias2)
 			/* Disable cs, pullup & enable micbias */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
 		else
 			/* Disable micbias, enable pullup & cs */
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_PULLUP);
+
+#endif //CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
 		break;
 	default:
 		break;
@@ -403,6 +424,9 @@ static void wcd_mbhc_clr_and_turnon_hph_padac(struct wcd_mbhc *mbhc)
 	bool pa_turned_on = false;
 	u8 wg_time;
 	struct snd_soc_codec *codec = mbhc->codec;
+#ifdef CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
+       hphr_channel_on(0);
+#endif //CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
 
 	wg_time = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_RX_HPH_CNP_WG_TIME);
 	wg_time += 1;
@@ -429,6 +453,22 @@ static void wcd_mbhc_clr_and_turnon_hph_padac(struct wcd_mbhc *mbhc)
 	}
 }
 
+#ifdef CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
+static bool wcd_mbhc_is_hphr_pa_on(struct snd_soc_codec *codec)
+{
+	u8 hph_reg_val = 0;
+	hph_reg_val = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_RX_HPH_CNP_EN);
+
+	return (hph_reg_val & 0x10) ? true : false;
+}
+static bool wcd_mbhc_is_hphl_pa_on(struct snd_soc_codec *codec)
+{
+	u8 hph_reg_val = 0;
+	hph_reg_val = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_RX_HPH_CNP_EN);
+
+	return (hph_reg_val & 0x20) ? true : false;
+}
+#else
 static bool wcd_mbhc_is_hph_pa_on(struct snd_soc_codec *codec)
 {
 	u8 hph_reg_val = 0;
@@ -436,6 +476,7 @@ static bool wcd_mbhc_is_hph_pa_on(struct snd_soc_codec *codec)
 
 	return (hph_reg_val & 0x30) ? true : false;
 }
+#endif //CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
 
 static void wcd_mbhc_set_and_turnoff_hph_padac(struct wcd_mbhc *mbhc)
 {
@@ -447,6 +488,21 @@ static void wcd_mbhc_set_and_turnoff_hph_padac(struct wcd_mbhc *mbhc)
 
 	/* If headphone PA is on, check if userspace receives
 	* removal event to sync-up PA's state */
+#ifdef CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
+	if (wcd_mbhc_is_hphl_pa_on(codec)) {
+		pr_debug("%s LPA is on, setting PA_OFF_ACK\n", __func__);
+		set_bit(WCD_MBHC_HPHL_PA_OFF_ACK, &mbhc->hph_pa_dac_state);
+	} else {
+		pr_debug("%s LPA is off\n", __func__);
+	}
+
+   	if (wcd_mbhc_is_hphr_pa_on(codec)) {
+		pr_debug("%s RPA is on, setting PA_OFF_ACK\n", __func__);
+		set_bit(WCD_MBHC_HPHR_PA_OFF_ACK, &mbhc->hph_pa_dac_state);
+	} else {
+		pr_debug("%s RPA is off\n", __func__);
+	}
+#else
 	if (wcd_mbhc_is_hph_pa_on(codec)) {
 		pr_debug("%s PA is on, setting PA_OFF_ACK\n", __func__);
 		set_bit(WCD_MBHC_HPHL_PA_OFF_ACK, &mbhc->hph_pa_dac_state);
@@ -454,6 +510,7 @@ static void wcd_mbhc_set_and_turnoff_hph_padac(struct wcd_mbhc *mbhc)
 	} else {
 		pr_debug("%s PA is off\n", __func__);
 	}
+#endif //CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
 	snd_soc_update_bits(codec, MSM8X16_WCD_A_ANALOG_RX_HPH_CNP_EN,
 			    0x30, 0x00);
 	usleep_range(wg_time * 1000, wg_time * 1000 + 50);
@@ -693,7 +750,12 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			 jack_type, mbhc->hph_status);
 		wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
 				mbhc->hph_status, WCD_MBHC_JACK_MASK);
+#ifdef CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
+		//wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+		//annotate turn off operation, in order to resolve no sound problem while unplug headset in voice speaker mode
+#else
 		wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+#endif //CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
 		hphrocp_off_report(mbhc, SND_JACK_OC_HPHR);
 		hphlocp_off_report(mbhc, SND_JACK_OC_HPHL);
 		mbhc->current_plug = MBHC_PLUG_TYPE_NONE;
@@ -858,7 +920,11 @@ static bool wcd_check_cross_conn(struct wcd_mbhc *mbhc)
 			MSM8X16_WCD_A_ANALOG_MBHC_ZDET_ELECT_RESULT);
 	pr_debug("%s: swap_res %x\n", __func__, swap_res);
 	if (!(swap_res & 0x0C)) {
+#ifdef CONFIG_ZTEMT_EURO_HEADSET_SUPPORT
 		plug_type = MBHC_PLUG_TYPE_GND_MIC_SWAP;
+#else
+		plug_type = MBHC_PLUG_TYPE_HEADSET;
+#endif
 		pr_debug("%s: Cross connection identified\n", __func__);
 	} else {
 		pr_debug("%s: No Cross connection found\n", __func__);
@@ -1239,6 +1305,13 @@ static void wcd_mbhc_swch_irq_handler(struct wcd_mbhc *mbhc)
 	micbias1 = (snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MICB_1_EN) & 0x80);
 	if ((mbhc->current_plug == MBHC_PLUG_TYPE_NONE) &&
 	    detection_type) {
+#ifdef CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
+		wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+		//turn off the hph pa while insert headset irq, in order to fix the headset type detect problem
+		//while headset type detect, the hph pa must be turned off
+		hphr_channel_on(1);
+		//enable the HPHR switch, ensure the headset type detect normal
+#endif //CONFIG_FEATURE_ZTEMT_AUDIO_EXT_PA
 		/* Make sure MASTER_BIAS_CTL is enabled */
 		snd_soc_update_bits(codec,
 				    MSM8X16_WCD_A_ANALOG_MASTER_BIAS_CTL,

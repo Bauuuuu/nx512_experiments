@@ -25,8 +25,13 @@
 #define CAM_FLASH_PINCTRL_STATE_SLEEP "cam_flash_suspend"
 #define CAM_FLASH_PINCTRL_STATE_DEFAULT "cam_flash_default"
 /*#define CONFIG_MSMB_CAMERA_DEBUG*/
+#ifdef CONFIG_MSMB_CAMERA_DEBUG
 #undef CDBG
 #define CDBG(fmt, args...) pr_debug(fmt, ##args)
+#else
+#undef CDBG
+#define CDBG(fmt, args...) do {} while(0)
+#endif
 
 int32_t msm_led_i2c_trigger_get_subdev_id(struct msm_led_flash_ctrl_t *fctrl,
 	void *arg)
@@ -222,6 +227,9 @@ int msm_flash_led_init(struct msm_led_flash_ctrl_t *fctrl)
 		if (rc < 0)
 			pr_err("%s:%d failed\n", __func__, __LINE__);
 	}
+	//ztemt added by congshan start
+     rc = 0;	
+	//ztemt added by congshan start
 	fctrl->led_state = MSM_CAMERA_LED_INIT;
 	return rc;
 }
@@ -244,6 +252,15 @@ int msm_flash_led_release(struct msm_led_flash_ctrl_t *fctrl)
 		pr_err("%s:%d invalid led state\n", __func__, __LINE__);
 		return -EINVAL;
 	}
+	//added by congshan start
+	if (fctrl->flash_i2c_client && fctrl->reg_setting->release_setting) {
+		rc = fctrl->flash_i2c_client->i2c_func_tbl->i2c_write_table(
+			fctrl->flash_i2c_client,
+			fctrl->reg_setting->release_setting);
+		if (rc < 0)
+			pr_err("%s:%d failed\n", __func__, __LINE__);
+	}
+	//added by congshan end
 	gpio_set_value_cansleep(
 		power_info->gpio_conf->gpio_num_info->
 		gpio_num[SENSOR_GPIO_FL_EN],

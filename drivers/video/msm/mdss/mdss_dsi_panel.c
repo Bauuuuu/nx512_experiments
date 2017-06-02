@@ -24,6 +24,13 @@
 
 #include "mdss_dsi.h"
 
+#include "zte_lcd_avdd.h"
+#include "zte_lcd_dsi.h"
+
+#ifdef CONFIG_ZTEMT_LCD_DISP_PREFERENCES
+extern struct mdss_dsi_ctrl_pdata *zte_mdss_dsi_ctrl;
+#endif
+
 #define DT_CMD_HDR 6
 
 /* NT35596 panel specific status variables */
@@ -1681,6 +1688,13 @@ int mdss_dsi_panel_init(struct device_node *node,
 		pr_info("%s: Panel Name = %s\n", __func__, panel_name);
 		strlcpy(&pinfo->panel_name[0], panel_name, MDSS_MAX_PANEL_LEN);
 	}
+
+#ifdef CONFIG_ZTEMT_LCD_DISP_PREFERENCES
+	if (panel_name)
+		ctrl_pdata->panel_name = (char *)panel_name;
+	zte_mdss_dsi_ctrl = ctrl_pdata;
+#endif
+
 	rc = mdss_panel_parse_dt(node, ctrl_pdata);
 	if (rc) {
 		pr_err("%s:%d panel dt parse failed\n", __func__, __LINE__);

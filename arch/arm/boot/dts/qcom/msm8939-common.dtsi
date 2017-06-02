@@ -1,4 +1,4 @@
-/* Copyright (c) 2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -28,10 +28,17 @@
 		smd21 = &smdtty_data21;
 		smd36 = &smdtty_loopback;
 		i2c0 = &i2c_0;
+		// ztemt add by zhubing start
+		// add i2c gpio-10 gpio-11
+		i2c3 = &i2c_3;
+		// ztemt add by zhubing end
 		i2c4 = &i2c_4;
 		i2c5 = &i2c_5;
 		i2c6 = &i2c_6;
-		spi0 = &spi_0;
+		// ztemt add by zhubing start
+		// cancle spi0
+		//spi0 = &spi_0;
+		// ztemt add by zhubing end
 		spi5 = &spi_5;
 	};
 
@@ -62,7 +69,15 @@
 			reg = <0x0 0x8bd00000 0x0 0x0600000>;
 			label = "peripheral_mem";
 		};
-
+		
+		pstore_reserve_mem: pstore_reserve_mem_region@0 { 
+			linux,reserve-contiguous-region; 
+			linux,reserve-region; 
+			linux,remove-completely; 
+			reg = <0x0 0x9ff00000 0x0 0x00100000>; 
+			label = "pstore_reserve_mem"; 
+		};
+		
 		venus_mem: venus_region@0 {
 			linux,reserve-contiguous-region;
 			linux,memory-limit = <0x90000000>;
@@ -104,10 +119,8 @@
 #include "msm-gdsc-8916.dtsi"
 #include "msm8939-iommu.dtsi"
 #include "msm8939-bus.dtsi"
-#include "msm8939-mdss.dtsi"
 #include "msm8939-iommu-domains.dtsi"
 #include "msm8939-camera.dtsi"
-#include "msm8939-mdss-pll.dtsi"
 
 &soc {
 	#address-cells = <1>;
@@ -125,7 +138,8 @@
 
 	restart@4ab000 {
 		compatible = "qcom,pshold";
-		reg = <0x4ab000 0x4>;
+		reg = <0x4ab000 0x4>,
+		      <0x193d100 0x4>;
 	};
 
 	timer@b120000 {
@@ -559,7 +573,7 @@
 		compatible = "qcom,memshare";
 
 		qcom,client_1 {
-			compatible = "qcom,memshare-peripheral";
+			compatible = "memshare,peripheral";
 			qcom,peripheral-size = <2097152>;
 			label = "modem";
 		};
@@ -670,12 +684,13 @@
 		qcom,bam-pipe-pair = <2>;
 		qcom,ce-hw-instance = <0>;
 		qcom,ce-device = <0>;
+		qcom,clk-mgmt-sus-res;
 		qcom,msm-bus,name = "qcrypto-noc";
 		qcom,msm-bus,num-cases = <2>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps =
 				<55 512 0 0>,
-				<55 512 3936000 393600>;
+				<55 512 393600 800000>; /* 49.2MHz & 100MHz */
 		clocks = <&clock_gcc clk_crypto_clk_src>,
 			 <&clock_gcc clk_gcc_crypto_clk>,
 			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
@@ -705,7 +720,7 @@
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps =
 				<55 512 0 0>,
-				<55 512 3936000 393600>;
+				<55 512 393600 800000>; /* 49.2MHz & 100MHz */
 		clocks = <&clock_gcc clk_crypto_clk_src>,
 			 <&clock_gcc clk_gcc_crypto_clk>,
 			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
@@ -727,6 +742,7 @@
 		qcom,msm-bus,num-cases = <4>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,support-bus-scaling;
+		qcom,support-fde;
 		qcom,msm-bus,vectors-KBps =
 				<55 512 0 0>,
 				<55 512 0 0>,
@@ -819,8 +835,9 @@
 		compatible = "qcom,android-usb";
 		reg = <0x086000c8 0xc8>;
 		qcom,pm-qos-latency = <2 1001 12701>;
+		qcom,android-usb-cdrom;
 		qcom,streaming-func = "mtp";
-		qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
+		#qcom,android-usb-uicc-nluns = /bits/ 8 <1>;
 	};
 
 	uicc: qcom,ehci-host@79c0000 {
@@ -914,7 +931,7 @@
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 97 0>, <0 238 0>;
 		spi-max-frequency = <19200000>;
-		pinctrl-names = "spi_default", "spi_sleep";
+		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&spi0_default &spi0_cs0_active>;
 		pinctrl-1 = <&spi0_sleep &spi0_cs0_sleep>;
 		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
@@ -928,6 +945,35 @@
 		qcom,bam-producer-pipe-index = <9>;
 		qcom,master-id = <86>;
 		};
+		
+	// ztemt add by zhubing start
+	// add i2c qup3 (gpio10 gpio11)
+	i2c_3: i2c@78b7000 { /* BLSP1 QUP3 */
+		compatible = "qcom,i2c-msm-v2";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr", "bam_phys_addr";
+		reg = <0x78b7000 0x1000>,
+		      <0x7884000 0x23000>;
+		interrupt-names = "qup_irq", "bam_irq";
+		interrupts = <0 97 0>, <0 238 0>;
+		qcom,clk-freq-out = <100000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
+			 <&clock_gcc clk_gcc_blsp1_qup3_i2c_apps_clk>;
+
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_3_active>;
+		pinctrl-1 = <&i2c_3_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,bam-pipe-idx-cons = <8>;
+		qcom,bam-pipe-idx-prod = <9>;
+		qcom,master-id = <86>;
+	};
+	// ztemt add by zhubing end
+
 
 	i2c_4: i2c@78b8000 { /* BLSP1 QUP4 */
 		compatible = "qcom,i2c-msm-v2";
@@ -963,7 +1009,7 @@
 		      <0x7884000 0x23000>;
 		interrupt-names = "qup_irq", "bam_irq";
 		interrupts = <0 99 0>, <0 238 0>;
-		qcom,clk-freq-out = <100000>;
+		qcom,clk-freq-out = <400000>;
 		qcom,clk-freq-in  = <19200000>;
 		clock-names = "iface_clk", "core_clk";
 		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
@@ -985,12 +1031,12 @@
 		#size-cells = <0>;
 		reg-names = "spi_physical", "spi_bam_physical";
 		reg = <0x78b9000 0x1000>,
-			<0x7884000 0x23000>;
+			<0x7884000 0x19000>;
 		interrupt-names = "spi_irq", "spi_bam_irq";
 		interrupts = <0 99 0>, <0 238 0>;
 		spi-max-frequency = <18000000>;
 		qcom,use-pinctrl;
-		pinctrl-names = "spi_default", "spi_sleep";
+		pinctrl-names = "default", "sleep";
 		pinctrl-0 = <&spi5_default &spi5_cs0_active>;
 		pinctrl-1 = <&spi5_sleep &spi5_cs0_sleep>;
 		clocks = <&clock_gcc clk_gcc_blsp1_ahb_clk>,
@@ -1144,7 +1190,7 @@
 		reg = <0x4a3000 0x1000>;
 		clock-frequency = <32768>;
 	};
-
+/* comment by congshan start 
 	blsp1_uart1: serial@78af000 {
 		compatible = "qcom,msm-hsuart-v14";
 		reg = <0x78af000 0x200>,
@@ -1175,7 +1221,7 @@
 		pinctrl-1 = <&hsuart_sleep>;
 		status = "disabled";
 	};
-
+comment by congshan end*/
 	qcom,venus@1de0000 {
 		compatible = "qcom,pil-tz-generic";
 		reg = <0x1de0000 0x4000>;
@@ -1199,7 +1245,7 @@
 		qcom,scm_core_clk_src = <80000000>;
 
 		qcom,pas-id = <9>;
-		qcom,proxy-timeout-ms = <5000>;
+		qcom,proxy-timeout-ms = <100>;
 		qcom,firmware-name = "venus";
 		linux,contiguous-region = <&venus_mem>;
 	};
@@ -1327,7 +1373,7 @@
 			compatible = "qcom,msm-dai-q6-mi2s";
 			qcom,msm-dai-q6-mi2s-dev-id = <3>;
 			qcom,msm-mi2s-rx-lines = <1>;
-			qcom,msm-mi2s-tx-lines = <2>;
+			qcom,msm-mi2s-tx-lines = <0>;
 		};
 	};
 
@@ -1490,12 +1536,6 @@
 		qcom,reg-presets = <0xE0020 0x0aaaaaaa>,
 			<0xE0024 0x0aaaaaaa>,
 			<0x80124 0x00000003>;
-		qcom,qdss-presets = <0x825000 0x1000>,
-			<0x826000 0x1000>,
-			<0x821000 0x1000>,
-			<0x802000 0x1000>,
-			<0x9180000 0x1000>,
-			<0x9181000 0x1000>;
 		qcom,max-hw-load = <489600>; /* 1080p @ 30 + 1080p @ 30 */
 		qcom,enable-idle-indicator;
 		qcom,vidc-iommu-domains {
@@ -1606,6 +1646,19 @@
 			<0x07706010 0x4>;
 		reg-names = "avtimer_lsb_addr", "avtimer_msb_addr";
 		qcom,clk_div = <27>;
+	};
+
+	mcd {
+		compatible = "qcom,mcd";
+		qcom,ce-hw-instance = <0>;
+		qcom,ce-device = <0>;
+		clocks = <&clock_gcc clk_crypto_clk_src>,
+			 <&clock_gcc clk_gcc_crypto_clk>,
+			 <&clock_gcc clk_gcc_crypto_ahb_clk>,
+			 <&clock_gcc clk_gcc_crypto_axi_clk>;
+		clock-names = "core_clk_src", "core_clk",
+				"iface_clk", "bus_clk";
+		qcom,ce-opp-freq = <100000000>;
 	};
 };
 

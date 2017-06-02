@@ -55,7 +55,11 @@ dtb-$(CONFIG_ARCH_MSM8909) += msm8909-sim.dtb \
 	msm8208-1gb-qrd-skue.dtb \
 	msm8208-rcm.dtb \
 	msm8909-pm8916-mtp.dtb \
-	msm8909-pm8916-cdp.dtb
+	msm8909-pm8916-cdp.dtb \
+	msm8909-1gb-mtp.dtb
+ifeq ($(CONFIG_MACH_NUBIA_MSM8939),y)
+dtb-$(CONFIG_ARCH_MSM8916) += msm8939-NX512J.dtb
+else	
 dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8916-rumi.dtb \
 	msm8916-cdp.dtb \
@@ -92,6 +96,14 @@ dtb-$(CONFIG_ARCH_MSM8916) += msm8916-sim.dtb \
 	msm8936-mtp-wcd9306.dtb \
 	msmtellurium-sim.dtb \
 	msmtellurium-rumi.dtb
+	msmtellurium-rumi.dtb \
+	msm8929-cdp.dtb \
+	msm8929-mtp.dtb \
+	msm8929-mtp-smb1360.dtb \
+	msm8929-mtp-jdi-smb1360.dtb \
+	msm8929-mtp-wcd9306-smb1360.dtb \
+	msm8929-cdp-jdi.dtb
+endif	
 dtb-$(CONFIG_ARCH_MSM8226) += msm8226-sim.dtb \
 	msm8226-fluid.dtb \
 	msm8226-v1-cdp.dtb \
@@ -225,7 +237,11 @@ dtb-$(CONFIG_ARCH_MSM8994) += msm8994-v1-sim.dtb \
 dtb-$(CONFIG_ARCH_MSM8992) += msm8992-sim.dtb \
 	msm8992-rumi.dtb
 
+ifeq ($(CONFIG_MACH_NUBIA_MSM8939),y)
+DTB_NAMES := $(subst $\",,$(CONFIG_BUILD_ARM_APPENDED_DTB_IMAGE_NAMES_ZTEMT))
+else
 DTB_NAMES := $(subst $\",,$(CONFIG_BUILD_ARM_APPENDED_DTB_IMAGE_NAMES))
+endif
 ifneq ($(DTB_NAMES),)
 DTB_LIST := $(addsuffix .dtb,$(DTB_NAMES))
 else

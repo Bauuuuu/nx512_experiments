@@ -8,4 +8,8 @@ obj-$(CONFIG_MSMB_CAMERA) += adp1660.o
 obj-$(CONFIG_MSMB_CAMERA) += bd7710.o
 obj-$(CONFIG_MSMB_CAMERA) += msm_led_torch.o
 obj-$(CONFIG_MSMB_CAMERA) += msm_flash.o
+ifeq ($(CONFIG_MACH_NUBIA_MSM8939),y)
+obj-$(CONFIG_MSMB_CAMERA) += zte_lm3642.o
+else
 obj-$(CONFIG_MSMB_CAMERA) += lm3642.o
+endif

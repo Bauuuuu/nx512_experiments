@@ -42,6 +42,9 @@
 #define SCM_EDLOAD_MODE			0X01
 #define SCM_DLOAD_CMD			0x10
 
+#ifdef CONFIG_ZTEMT_PANIC_BOOTMODE
+#define PANIC_MODE           0x77665523
+#endif
 
 static int restart_mode;
 void *restart_reason;
@@ -219,7 +222,11 @@ static void msm_restart_prepare(const char *cmd)
 #endif
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
+#ifdef CONFIG_ZTEMT_PANIC_BOOTMODE
+	if (get_dload_mode() || (cmd != NULL && cmd[0] != '\0') || in_panic)
+#else
 	if (get_dload_mode() || (cmd != NULL && cmd[0] != '\0'))
+#endif
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
 	else
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
@@ -245,6 +252,12 @@ static void msm_restart_prepare(const char *cmd)
 		}
 	}
 
+#ifdef CONFIG_ZTEMT_PANIC_BOOTMODE
+	if(in_panic) {
+		printk(KERN_EMERG" set panic reboot reason\n");
+		__raw_writel(PANIC_MODE, restart_reason); 
+	}
+#endif
 	flush_cache_all();
 
 	/*outer_flush_all is not supported by 64bit kernel*/
